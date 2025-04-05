@@ -1,0 +1,313 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+#define NUM_SENSORS 8  // Number of HX710B sensors
+
+const int clockPin = 3;
+const int dataPins[NUM_SENSORS] = {4, 5, 6, 7, 8, 9, 10, 11};
+
+// Relay Pins
+const int inflatepin = 25;
+const int deflatepin = 27;
+const int ch1 = 29;
+const int ch2 = 31;
+const int ch3 = 33;
+const int ch4 = 35;
+const int ch5 = 37;
+const int ch6 = 39;
+const int ch7 = 41;
+const int ch8 = 43;
+
+// Control Buttons
+const int onfbutton = 14;
+const int sq1 = 15;
+const int sq2 = 16;
+
+// Button Debounce
+bool inflateMode = false;
+bool lastButtonState = HIGH;
+bool lastSq1State = HIGH;
+bool lastSq2State = HIGH;
+unsigned long lastDebounceTime = 0;
+const unsigned long debounceDelay = 50;
+
+// Timer variables for non-blocking inflation/deflation
+unsigned long actionStartTime = 0;
+const unsigned long inflateTime = 3000;  // 3 seconds
+const unsigned long deflateTime = 4000; // 4 seconds
+bool inflating = false;
+bool deflating = false;
+
+// Timer for sensor update
+unsigned long lastSensorUpdate = 0;
+const unsigned long sensorUpdateInterval = 500;  // Update sensors every 500ms
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+void startInflate() 
+{
+  Serial.println("Inflating...");
+  digitalWrite(inflatepin, LOW);
+  digitalWrite(deflatepin, HIGH);
+
+  digitalWrite(ch1, LOW);
+  digitalWrite(ch2, LOW);
+  digitalWrite(ch3, LOW);
+  digitalWrite(ch4, LOW);
+  digitalWrite(ch5, LOW);
+  digitalWrite(ch6, LOW);
+  digitalWrite(ch7, LOW);
+  digitalWrite(ch8, LOW);
+
+  inflating = true;
+  deflating = false;
+  actionStartTime = millis();  // Start timer
+}
+
+void startDeflate() 
+{
+  Serial.println("Deflating...");
+  digitalWrite(inflatepin, HIGH);
+  digitalWrite(deflatepin, LOW);
+
+  digitalWrite(ch1, LOW);
+  digitalWrite(ch2, LOW);
+  digitalWrite(ch3, LOW);
+  digitalWrite(ch4, LOW);
+  digitalWrite(ch5, LOW);
+  digitalWrite(ch6, LOW);
+  digitalWrite(ch7, LOW);
+  digitalWrite(ch8, LOW);
+
+  inflating = false;
+  deflating = true;
+  actionStartTime = millis();  // Start timer
+}
+
+void holdAir() 
+{
+  Serial.println("Holding...");
+  digitalWrite(inflatepin, HIGH);
+  digitalWrite(deflatepin, HIGH);
+
+  digitalWrite(ch1, HIGH);
+  digitalWrite(ch2, HIGH);
+  digitalWrite(ch3, HIGH);
+  digitalWrite(ch4, HIGH);
+  digitalWrite(ch5, HIGH);
+  digitalWrite(ch6, HIGH);
+  digitalWrite(ch7, HIGH);
+  digitalWrite(ch8, HIGH);
+
+  inflating = false;
+  deflating = false;
+}
+
+// Function for sq1 button press
+void startsq1() 
+{
+  Serial.println("sequence 1");
+  digitalWrite(inflatepin, LOW);
+  digitalWrite(deflatepin, HIGH);
+
+  digitalWrite(ch1, LOW);
+  digitalWrite(ch2, LOW);
+  digitalWrite(ch3, HIGH);
+  digitalWrite(ch4, HIGH);
+  digitalWrite(ch5, HIGH);
+  digitalWrite(ch6, HIGH);
+  digitalWrite(ch7, HIGH);
+  digitalWrite(ch8, HIGH);
+  delay(2000);
+  digitalWrite(ch1, HIGH);
+  digitalWrite(ch2, HIGH);
+  digitalWrite(ch3, LOW);
+  digitalWrite(ch4, LOW);
+  digitalWrite(ch5, HIGH);
+  digitalWrite(ch6, HIGH);
+  digitalWrite(ch7, HIGH);
+  digitalWrite(ch8, HIGH);
+  delay(2000);
+  digitalWrite(ch1, HIGH);
+  digitalWrite(ch2, HIGH);
+  digitalWrite(ch3, HIGH);
+  digitalWrite(ch4, HIGH);
+  digitalWrite(ch5, LOW);
+  digitalWrite(ch6, LOW);
+  digitalWrite(ch7, HIGH);
+  digitalWrite(ch8, HIGH);
+  delay(2000);
+  digitalWrite(ch1, HIGH);
+  digitalWrite(ch2, HIGH);
+  digitalWrite(ch3, HIGH);
+  digitalWrite(ch4, HIGH);
+  digitalWrite(ch5, HIGH);
+  digitalWrite(ch6, HIGH);
+  digitalWrite(ch7, LOW);
+  digitalWrite(ch8, LOW);
+  delay(2000);
+  holdAir(); 
+}
+
+// Function for sq2 button press
+void startsq2() 
+{
+  Serial.println("sequence 1");
+  digitalWrite(inflatepin, LOW);
+  digitalWrite(deflatepin, HIGH);
+
+  digitalWrite(ch1, LOW);
+  digitalWrite(ch2, HIGH);
+  digitalWrite(ch3, LOW);
+  digitalWrite(ch4, HIGH);
+  digitalWrite(ch5, LOW);
+  digitalWrite(ch6, HIGH);
+  digitalWrite(ch7, LOW);
+  digitalWrite(ch8, HIGH);
+  delay(2000);
+  digitalWrite(ch1, HIGH);
+  digitalWrite(ch2, LOW);
+  digitalWrite(ch3, HIGH);
+  digitalWrite(ch4, LOW);
+  digitalWrite(ch5, HIGH);
+  digitalWrite(ch6, LOW);
+  digitalWrite(ch7, HIGH);
+  digitalWrite(ch8, LOW);
+  delay(2000);
+  startDeflate(); 
+  digitalWrite(ch1, HIGH);
+  digitalWrite(ch2, LOW);
+  digitalWrite(ch3, HIGH);
+  digitalWrite(ch4, LOW);
+  digitalWrite(ch5, HIGH);
+  digitalWrite(ch6, LOW);
+  digitalWrite(ch7, HIGH);
+  digitalWrite(ch8, LOW);
+  delay(2000);
+  digitalWrite(ch1, LOW);
+  digitalWrite(ch2, HIGH);
+  digitalWrite(ch3, LOW);
+  digitalWrite(ch4, HIGH);
+  digitalWrite(ch5, LOW);
+  digitalWrite(ch6, HIGH);
+  digitalWrite(ch7, LOW);
+  digitalWrite(ch8, HIGH);
+  delay(2000);
+  holdAir(); 
+}
+
+void setup() 
+{
+  Serial.begin(9600);
+  pinMode(clockPin, OUTPUT);
+  pinMode(inflatepin, OUTPUT);
+  pinMode(deflatepin, OUTPUT);
+  pinMode(onfbutton, INPUT_PULLUP);
+  pinMode(sq1, INPUT_PULLUP);
+  pinMode(sq2, INPUT_PULLUP);
+
+  for (int i = 29; i <= 43; i += 2) pinMode(i, OUTPUT);  // Set relays 2-9 as OUTPUT
+  for (int i = 0; i < NUM_SENSORS; i++) pinMode(dataPins[i], INPUT);
+
+  lcd.init();
+  lcd.backlight();
+  lcd.print("HX710B Sensors");
+  delay(2000);
+  lcd.clear();
+
+  holdAir();  // Initialize system in "hold air" mode
+}
+
+long readHX710B(int dataPin) 
+{
+  long result = 0;
+  while (digitalRead(dataPin) == HIGH);
+  for (int i = 0; i < 24; i++) 
+  {
+    digitalWrite(clockPin, HIGH);
+    result = (result << 1) | digitalRead(dataPin);
+    digitalWrite(clockPin, LOW);
+  }
+  digitalWrite(clockPin, HIGH);
+  delayMicroseconds(1);
+  digitalWrite(clockPin, LOW);
+  return result;
+}
+
+void loop() 
+{
+  // Read On/Off Button with Debounce
+  bool currentButtonState = digitalRead(onfbutton);
+  if (currentButtonState == LOW && lastButtonState == HIGH) 
+  {
+    if (millis() - lastDebounceTime > debounceDelay) 
+    {
+      inflateMode = !inflateMode;
+      if (inflateMode) startInflate();
+      else startDeflate();
+      lastDebounceTime = millis();
+    }
+  }
+  lastButtonState = currentButtonState;
+
+  // Read sq1 Button with Debounce
+  bool currentSq1State = digitalRead(sq1);
+  if (currentSq1State == LOW && lastSq1State == HIGH) 
+  {
+    if (millis() - lastDebounceTime > debounceDelay) 
+    {
+      startsq1();
+      lastDebounceTime = millis();
+    }
+  }
+  lastSq1State = currentSq1State;
+
+  // Read sq2 Button with Debounce
+  bool currentSq2State = digitalRead(sq2);
+  if (currentSq2State == LOW && lastSq2State == HIGH) 
+  {
+    if (millis() - lastDebounceTime > debounceDelay) 
+    {
+      startsq2();
+      lastDebounceTime = millis();
+    }
+  }
+  lastSq2State = currentSq2State;
+
+  // Non-blocking delay for inflating/deflating
+  if (inflating && millis() - actionStartTime >= inflateTime) 
+  {
+    holdAir();
+  } 
+  if (deflating && millis() - actionStartTime >= deflateTime) 
+  {
+    holdAir();
+  }
+
+  // Non-blocking Sensor Update
+
+  for (int i = 0; i < NUM_SENSORS; i += 2) 
+  {
+
+    if (millis() - lastSensorUpdate > sensorUpdateInterval) 
+    {
+      lastSensorUpdate = millis();
+      lcd.clear();
+
+      for (int j = 0; j < 2 && (i + j) < NUM_SENSORS; j++) 
+      {
+        long pressureValue = readHX710B(dataPins[i + j]);
+        Serial.print("Sensor ");
+        Serial.print(i + j + 1);
+        Serial.print(": ");
+        Serial.println(pressureValue);
+        lcd.setCursor(0, j);
+        lcd.print("S");
+        lcd.print(i + j + 1);
+        lcd.print(": ");
+        lcd.print(pressureValue);
+      }
+    }
+    Serial.println("-------------------------");
+  }
+}
